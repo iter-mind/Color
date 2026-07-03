@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tone Wheel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0d0c0b;
+    --fg: #e8e3d9;
+    --muted: #8a8478;
+    --border: #232120;
+    --border2: #3a362f;
+    --panelHover: #1a1815;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .display { font-family: 'Fraunces', serif; }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+  .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-left: 8px; }
+  .btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: #c9c3b6;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { background: var(--panelHover); }
+  .btn:disabled { opacity: 0.3; cursor: default; }
+  .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .btn.primary:hover { background: #fff; }
+  .btn.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+  #headerActions { display: flex; gap: 8px; }
+
+  #empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 32px;
+    text-align: center;
+  }
+  #empty .swatch {
+    width: 64px; height: 64px; border-radius: 999px;
+    background: conic-gradient(from 90deg, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%));
+  }
+  #empty p.big { font-size: 24px; margin: 0 0 8px; }
+  #empty p.sub { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0; max-width: 360px; }
+
+  #dropZone {
+    border: 1px dashed var(--border2);
+    border-radius: 10px;
+    padding: 40px 60px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  #dropZone:hover, #dropZone.dragover { border-color: #5a564d; background: rgba(255,255,255,0.02); }
+  #dropZone input[type=file] { display: none; }
+
+  #editor {
+    display: none;
+    flex: 1;
+    flex-direction: row;
+    overflow: hidden;
+  }
+  @media (max-width: 860px) {
+    #editor { flex-direction: column; }
+  }
+
+  #canvasArea {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    min-height: 0;
+    position: relative;
+    overflow: auto;
+  }
+  #mainCanvas {
+    max-width: 100%;
+    max-height: calc(100vh - 140px);
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  #mainCanvas.picking { cursor: crosshair; }
+
+  #pickHint {
+    position: absolute;
+    top: 36px; left: 36px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    padding: 6px 10px;
+    border-radius: 4px;
+    display: none;
+  }
+  #pickHint.show { display: block; }
+
+  #sidePanel {
+    width: 340px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+  }
+  @media (max-width: 860px) {
+    #sidePanel { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+  }
+
+  #reopenLabel { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 6px; }
+
+  #wheelWrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  #wheel {
+    position: relative;
+    width: 260px; height: 260px;
+    border-radius: 999px;
+    background: conic-gradient(from 90deg, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%));
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4);
+    user-select: none;
+    touch-action: none;
+  }
+  #wheel::before {
+    content: '';
+    position: absolute; inset: 0; border-radius: 999px;
+    background: radial-gradient(circle, rgba(30,28,26,1) 0%, rgba(30,28,26,0.55) 45%, rgba(30,28,26,0) 78%);
+    pointer-events: none;
+  }
+  #wheelCenterDot {
+    position: absolute; top: 50%; left: 50%;
+    width: 4px; height: 4px; margin: -2px;
+    border-radius: 999px; background: rgba(232,227,217,0.4);
+  }
+  .ghostMarker {
+    position: absolute;
+    width: 8px; height: 8px; margin: -4px;
+    border-radius: 999px;
+    border: 1px solid rgba(232,227,217,0.4);
+  }
+  .curMarker {
+    position: absolute;
+    border-radius: 999px;
+    cursor: grab;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+  .curMarker:active { cursor: grabbing; }
+  .connector { position: absolute; inset: 0; pointer-events: none; }
+
+  #pointsList { display: flex; flex-direction: column; gap: 8px; }
+  #pointsLabel { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .pointRow {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    cursor: pointer;
+  }
+  .pointRow.selected { border-color: #5a564d; background: var(--panelHover); }
+  .pointRowTop { display: flex; align-items: center; justify-content: space-between; }
+  .pointRowLeft { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 999px; flex-shrink: 0; }
+  .pointRowActions { display: flex; align-items: center; gap: 10px; }
+  .iconBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; display: flex; }
+  .iconBtn:hover { color: var(--fg); }
+  .sliderRow { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .sliderRow label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    background: transparent;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 2px; background: #4a4640; }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    margin-top: -6px;
+    width: 14px; height: 14px;
+    border-radius: 999px;
+    background: var(--fg);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-track { height: 2px; background: #4a4640; }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 999px;
+    background: var(--fg); border: 2px solid var(--bg); cursor: pointer;
+  }
+
+  #footNote { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); font-size: 10px; line-height: 1.6; color: #5a564d; }
+
+  svg.connectorSvg line { stroke: #e8e3d9; stroke-opacity: 0.5; stroke-width: 1; stroke-dasharray: 2 2; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="display" style="font-size:18px;">Tone Wheel</span>
+    <span class="eyebrow">one wheel · the whole edit</span>
+  </div>
+  <div id="headerActions">
+    <button class="btn" id="resetAllBtn" disabled>↺ Reset all</button>
+    <button class="btn primary" id="downloadBtn" style="display:none;">⬇ Download</button>
+  </div>
+</header>
+
+<div id="empty">
+  <div class="swatch"></div>
+  <div>
+    <p class="big display">You think in color.</p>
+    <p class="sub">Upload a photo. Click any color in it.<br>Drag it on the wheel to shift it.</p>
+  </div>
+  <div id="dropZone">
+    <label style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:8px;">
+      <span class="btn">⬆ Choose a photo</span>
+      <span style="font-size:10px; color:var(--muted);">or drop one here</span>
+      <input type="file" id="fileInput" accept="image/*">
+    </label>
+  </div>
+</div>
+
+<div id="editor">
+  <div id="canvasArea">
+    <canvas id="mainCanvas"></canvas>
+    <div id="pickHint">Click a color in the photo</div>
+  </div>
+  <div id="sidePanel">
+    <div>
+      <div id="reopenLabel">Open a different photo</div>
+      <input type="file" id="fileInput2" accept="image/*">
+    </div>
+
+    <div id="wheelWrap">
+      <div id="wheel">
+        <div id="wheelCenterDot"></div>
+        <!-- markers injected by JS -->
+      </div>
+      <button class="btn" id="pickBtn">◎ Pick a color</button>
+    </div>
+
+    <div id="pointsList">
+      <div id="pointsLabel">No colors picked yet</div>
+      <!-- point rows injected by JS -->
+    </div>
+
+    <div id="footNote">
+      Edits run in your browser only. Nothing is uploaded.
+      Originals are never modified — download makes a new file.
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- color math ----------
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) { h = s = 0; }
+    else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        default: h = (r - g) / d + 4;
+      }
+      h /= 6;
+    }
+    return [h * 360, s * 100, l * 100];
+  }
+
+  function hslToRgb(h, s, l) {
+    h /= 360; s /= 100; l /= 100;
+    let r, g, b;
+    if (s === 0) { r = g = b = l; }
+    else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1 / 3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1 / 3);
+    }
+    return [r * 255, g * 255, b * 255];
+  }
+
+  function hueDist(a, b) {
+    const d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  }
+
+  function angleToPoint(deg, radius) {
+    const rad = (deg * Math.PI) / 180;
+    return { x: Math.cos(rad) * radius, y: -Math.sin(rad) * radius };
+  }
+  function pointToAngle(x, y) {
+    let deg = (Math.atan2(-y, x) * 180) / Math.PI;
+    if (deg < 0) deg += 360;
+    return deg;
+  }
+
+  // ---------- state ----------
+  let imgEl = null;
+  let points = []; // {id, srcHue, srcSat, srcLight, hue, sat, light}
+  let selectedId = null;
+  let pickMode = false;
+  let dragId = null;
+  let fileName = "photo";
+
+  const WHEEL_SIZE = 260;
+  const WHEEL_R = WHEEL_SIZE / 2 - 14;
+
+  const workCanvas = document.createElement("canvas");
+  const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+
+  // ---------- DOM refs ----------
+  const emptyEl = document.getElementById("empty");
+  const editorEl = document.getElementById("editor");
+  const dropZone = document.getElementById("dropZone");
+  const fileInput = document.getElementById("fileInput");
+  const fileInput2 = document.getElementById("fileInput2");
+  const mainCanvas = document.getElementById("mainCanvas");
+  const mainCtx = mainCanvas.getContext("2d");
+  const pickHint = document.getElementById("pickHint");
+  const pickBtn = document.getElementById("pickBtn");
+  const wheel = document.getElementById("wheel");
+  const pointsList = document.getElementById("pointsList");
+  const pointsLabel = document.getElementById("pointsLabel");
+  const resetAllBtn = document.getElementById("resetAllBtn");
+  const downloadBtn = document.getElementById("downloadBtn");
+
+  // ---------- load file ----------
+  function loadFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    fileName = file.name.replace(/\.[^.]+$/, "") || "photo";
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        imgEl = img;
+        points = [];
+        selectedId = null;
+        emptyEl.style.display = "none";
+        editorEl.style.display = "flex";
+        downloadBtn.style.display = "inline-flex";
+        render();
+        renderWheel();
+        renderPointsList();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  fileInput.addEventListener("change", (e) => loadFile(e.target.files[0]));
+  fileInput2.addEventListener("change", (e) => loadFile(e.target.files[0]));
+
+  dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+  // page-wide drop too
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => {
+    if (editorEl.style.display === "flex") return; // avoid double-handling once editor open (still fine)
+    e.preventDefault();
+  });
+
+  // ---------- render image with color shifts ----------
+  function render() {
+    if (!imgEl) return;
+    const maxDim = 1800;
+    let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+    if (w > maxDim || h > maxDim) {
+      const scale = maxDim / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+    workCanvas.width = w;
+    workCanvas.height = h;
+    workCtx.drawImage(imgEl, 0, 0, w, h);
+
+    if (points.length > 0) {
+      const imageData = workCtx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+      const active = points.map(p => ({
+        srcHue: p.srcHue,
+        dHue: ((p.hue - p.srcHue + 540) % 360) - 180,
+        dSat: p.sat - p.srcSat,
+        dLight: p.light - p.srcLight
+      }));
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const [h, s, l] = rgbToHsl(r, g, b);
+        if (s < 4) continue;
+
+        let totalW = 0, dh = 0, ds = 0, dl = 0;
+        for (let k = 0; k < active.length; k++) {
+          const p = active[k];
+          const hd = hueDist(h, p.srcHue);
+          if (hd > 60) continue;
+          const w2 = Math.pow(1 - hd / 60, 2);
+          totalW += w2;
+          dh += w2 * p.dHue;
+          ds += w2 * p.dSat;
+          dl += w2 * p.dLight;
+        }
+        if (totalW <= 0) continue;
+        dh /= totalW; ds /= totalW; dl /= totalW;
+        const falloff = Math.min(1, totalW);
+        const newH = (h + dh * falloff + 360) % 360;
+        const newS = Math.max(0, Math.min(100, s + ds * falloff));
+        const newL = Math.max(0, Math.min(100, l + dl * falloff));
+        const [nr, ng, nb] = hslToRgb(newH, newS, newL);
+        data[i] = nr; data[i + 1] = ng; data[i + 2] = nb;
+      }
+      workCtx.putImageData(imageData, 0, 0);
+    }
+
+    mainCanvas.width = w;
+    mainCanvas.height = h;
+    mainCtx.clearRect(0, 0, w, h);
+    mainCtx.drawImage(workCanvas, 0, 0);
+  }
+
+  // ---------- picking colors from canvas ----------
+  pickBtn.addEventListener("click", () => {
+    pickMode = !pickMode;
+    pickBtn.classList.toggle("active", pickMode);
+    pickBtn.textContent = pickMode ? "◎ Click the photo…" : "◎ Pick a color";
+    mainCanvas.classList.toggle("picking", pickMode);
+    pickHint.classList.toggle("show", pickMode);
+  });
+
+  mainCanvas.addEventListener("click", (e) => {
+    if (!pickMode) return;
+    const rect = mainCanvas.getBoundingClientRect();
+    const scaleX = mainCanvas.width / rect.width;
+    const scaleY = mainCanvas.height / rect.height;
+    const x = Math.floor((e.clientX - rect.left) * scaleX);
+    const y = Math.floor((e.clientY - rect.top) * scaleY);
+    const pixel = mainCtx.getImageData(x, y, 1, 1).data;
+    const [h, s, l] = rgbToHsl(pixel[0], pixel[1], pixel[2]);
+    if (s < 4) return;
+
+    const existing = points.find(p => hueDist(p.srcHue, h) < 8);
+    if (existing) {
+      selectedId = existing.id;
+    } else {
+      const id = Date.now() + Math.random();
+      points.push({ id, srcHue: h, srcSat: s, srcLight: l, hue: h, sat: s, light: l });
+      selectedId = id;
+    }
+    pickMode = false;
+    pickBtn.classList.remove("active");
+    pickBtn.textContent = "◎ Pick a color";
+    mainCanvas.classList.remove("picking");
+    pickHint.classList.remove("show");
+
+    renderWheel();
+    renderPointsList();
+    resetAllBtn.disabled = points.length === 0;
+  });
+
+  // ---------- wheel rendering + drag ----------
+  function renderWheel() {
+    // remove old markers (keep center dot)
+    Array.from(wheel.querySelectorAll(".ghostMarker,.curMarker,.connectorSvg")).forEach(el => el.remove());
+
+    points.forEach(p => {
+      const srcPt = angleToPoint(p.srcHue, (p.srcSat / 100) * WHEEL_R);
+      const curPt = angleToPoint(p.hue, (p.sat / 100) * WHEEL_R);
+      const isSel = p.id === selectedId;
+
+      const ghost = document.createElement("div");
+      ghost.className = "ghostMarker";
+      ghost.style.left = (WHEEL_SIZE / 2 + srcPt.x) + "px";
+      ghost.style.top = (WHEEL_SIZE / 2 + srcPt.y) + "px";
+      wheel.appendChild(ghost);
+
+      const svgNS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("class", "connectorSvg connector");
+      svg.setAttribute("width", WHEEL_SIZE);
+      svg.setAttribute("height", WHEEL_SIZE);
+      const line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", WHEEL_SIZE / 2 + srcPt.x);
+      line.setAttribute("y1", WHEEL_SIZE / 2 + srcPt.y);
+      line.setAttribute("x2", WHEEL_SIZE / 2 + curPt.x);
+      line.setAttribute("y2", WHEEL_SIZE / 2 + curPt.y);
+      svg.appendChild(line);
+      wheel.appendChild(svg);
+
+      const marker = document.createElement("div");
+      marker.className = "curMarker";
+      const size = isSel ? 18 : 14;
+      marker.style.width = size + "px";
+      marker.style.height = size + "px";
+      marker.style.left = (WHEEL_SIZE / 2 + curPt.x) + "px";
+      marker.style.top = (WHEEL_SIZE / 2 + curPt.y) + "px";
+      marker.style.marginLeft = -(size / 2) + "px";
+      marker.style.marginTop = -(size / 2) + "px";
+      marker.style.background = `hsl(${p.hue}, ${p.sat}%, 55%)`;
+      marker.style.border = isSel ? "2px solid #e8e3d9" : "2px solid rgba(232,227,217,0.6)";
+      marker.dataset.id = p.id;
+      marker.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        dragId = p.id;
+        selectedId = p.id;
+        renderPointsList();
+      });
+      wheel.appendChild(marker);
+    });
+  }
+
+  function wheelPosFromEvent(e) {
+    const rect = wheel.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let x = e.clientX - cx;
+    let y = e.clientY - cy;
+    const dist = Math.sqrt(x * x + y * y);
+    if (dist > WHEEL_R) {
+      x = (x / dist) * WHEEL_R;
+      y = (y / dist) * WHEEL_R;
+    }
+    const angle = pointToAngle(x, y);
+    const sat = Math.min(100, (Math.sqrt(x * x + y * y) / WHEEL_R) * 100);
+    return { angle, sat };
+  }
+
+  window.addEventListener("pointermove", (e) => {
+    if (!dragId) return;
+    const { angle, sat } = wheelPosFromEvent(e);
+    const p = points.find(pt => pt.id === dragId);
+    if (p) {
+      p.hue = angle;
+      p.sat = sat;
+      renderWheel();
+      renderPointsList();
+      render();
+    }
+  });
+  window.addEventListener("pointerup", () => { dragId = null; });
+
+  // ---------- points list ----------
+  function renderPointsList() {
+    Array.from(pointsList.querySelectorAll(".pointRow")).forEach(el => el.remove());
+    pointsLabel.textContent = points.length === 0
+      ? "No colors picked yet"
+      : `${points.length} color${points.length > 1 ? "s" : ""} in play`;
+
+    points.forEach(p => {
+      const isSel = p.id === selectedId;
+      const row = document.createElement("div");
+      row.className = "pointRow" + (isSel ? " selected" : "");
+      row.addEventListener("click", () => {
+        selectedId = p.id;
+        renderWheel();
+        renderPointsList();
+      });
+
+      const top = document.createElement("div");
+      top.className = "pointRowTop";
+
+      const left = document.createElement("div");
+      left.className = "pointRowLeft";
+      const dot = document.createElement("div");
+      dot.className = "dot";
+      dot.style.background = `hsl(${p.hue}, ${p.sat}%, 55%)`;
+      const hueLabel = document.createElement("span");
+      hueLabel.style.fontSize = "11px";
+      hueLabel.style.color = "#c9c3b6";
+      hueLabel.textContent = `hue ${Math.round(p.hue)}°`;
+      left.appendChild(dot);
+      left.appendChild(hueLabel);
+
+      const actions = document.createElement("div");
+      actions.className = "pointRowActions";
+      const resetBtn = document.createElement("button");
+      resetBtn.className = "iconBtn";
+      resetBtn.title = "Reset this color";
+      resetBtn.textContent = "↺";
+      resetBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        p.hue = p.srcHue; p.sat = p.srcSat; p.light = p.srcLight;
+        renderWheel(); renderPointsList(); render();
+      });
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "iconBtn";
+      removeBtn.title = "Remove";
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        points = points.filter(pt => pt.id !== p.id);
+        if (selectedId === p.id) selectedId = null;
+        renderWheel(); renderPointsList(); render();
+        resetAllBtn.disabled = points.length === 0;
+      });
+      actions.appendChild(resetBtn);
+      actions.appendChild(removeBtn);
+
+      top.appendChild(left);
+      top.appendChild(actions);
+      row.appendChild(top);
+
+      if (isSel) {
+        const sliderRow = document.createElement("div");
+        sliderRow.className = "sliderRow";
+        const label = document.createElement("label");
+        label.textContent = `Lightness ${Math.round(p.light)}`;
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = "0"; slider.max = "100";
+        slider.value = p.light;
+        slider.addEventListener("input", (e) => {
+          p.light = Number(e.target.value);
+          label.textContent = `Lightness ${Math.round(p.light)}`;
+          renderWheel();
+          render();
+        });
+        sliderRow.appendChild(label);
+        sliderRow.appendChild(slider);
+        row.appendChild(sliderRow);
+      }
+
+      pointsList.appendChild(row);
+    });
+  }
+
+  // ---------- reset all / download ----------
+  resetAllBtn.addEventListener("click", () => {
+    points = [];
+    selectedId = null;
+    renderWheel();
+    renderPointsList();
+    render();
+    resetAllBtn.disabled = true;
+  });
+
+  downloadBtn.addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.download = `${fileName}-tonewheel.png`;
+    link.href = workCanvas.toDataURL("image/png");
+    link.click();
+  });
+
+})();
+</script>
+</body>
+</html>
