@@ -15,7 +15,7 @@
     --border2: #3a362f;
     --panelHover: #1a1815;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
     margin: 0;
     background: var(--bg);
@@ -24,6 +24,7 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    overscroll-behavior: none;
   }
   .display { font-family: 'Fraunces', serif; }
 
@@ -79,21 +80,18 @@
   #empty p.big { font-size: 24px; margin: 0 0 8px; }
   #empty p.sub { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0; max-width: 360px; }
 
-  #dropZone {
-    border: 1px dashed var(--border2);
-    border-radius: 10px;
-    padding: 40px 60px;
-    cursor: pointer;
-    transition: border-color 0.15s;
+  input[type=file] {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: #c9c3b6;
   }
-  #dropZone:hover, #dropZone.dragover { border-color: #5a564d; background: rgba(255,255,255,0.02); }
-  #dropZone input[type=file] { display: none; }
 
   #editor {
     display: none;
     flex: 1;
     flex-direction: row;
     overflow: hidden;
+    position: relative;
   }
   @media (max-width: 860px) {
     #editor { flex-direction: column; }
@@ -105,13 +103,14 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
+    padding-bottom: 96px;
     min-height: 0;
     position: relative;
     overflow: auto;
   }
   #mainCanvas {
     max-width: 100%;
-    max-height: calc(100vh - 140px);
+    max-height: calc(100vh - 200px);
     object-fit: contain;
     border-radius: 6px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
@@ -131,6 +130,65 @@
     display: none;
   }
   #pickHint.show { display: block; }
+
+  #analyzing {
+    position: absolute;
+    inset: 0;
+    background: rgba(13,12,11,0.88);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 20;
+  }
+  #analyzing.show { display: flex; }
+  .spinner {
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    border: 2px solid #3a362f;
+    border-top-color: #e8e3d9;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #analyzing p { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; }
+
+  /* suggest-a-look floating button */
+  #suggestBar {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+  }
+  #suggestBtn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 22px;
+    border-radius: 999px;
+    border: 1px solid var(--border2);
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  #suggestBtn:hover { border-color: #5a564d; }
+  #suggestBtn.active {
+    background: linear-gradient(90deg, #d97757, #e8b45a);
+    color: #0d0c0b;
+    border-color: transparent;
+  }
+  #suggestBtn .dot-icon {
+    width: 8px; height: 8px; border-radius: 999px;
+    background: currentColor;
+    opacity: 0.6;
+  }
 
   #sidePanel {
     width: 340px;
@@ -173,15 +231,27 @@
     position: absolute;
     width: 8px; height: 8px; margin: -4px;
     border-radius: 999px;
-    border: 1px solid rgba(232,227,217,0.4);
+    border: 1px solid rgba(232,227,217,0.35);
+    transition: left 0.5s cubic-bezier(.2,.8,.2,1), top 0.5s cubic-bezier(.2,.8,.2,1);
   }
   .curMarker {
     position: absolute;
     border-radius: 999px;
     cursor: grab;
     box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    transition: left 0.5s cubic-bezier(.2,.8,.2,1), top 0.5s cubic-bezier(.2,.8,.2,1), width 0.15s, height 0.15s, margin 0.15s;
   }
+  .curMarker.dragging { transition: none; }
   .curMarker:active { cursor: grabbing; }
+  .curMarker.userOwned::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 999px;
+    border: 1px dashed rgba(232,227,217,0.5);
+  }
+  .connectorSvg line { transition: x1 0.5s cubic-bezier(.2,.8,.2,1), y1 0.5s cubic-bezier(.2,.8,.2,1), x2 0.5s cubic-bezier(.2,.8,.2,1), y2 0.5s cubic-bezier(.2,.8,.2,1); }
+  .connectorSvg.dragging line { transition: none; }
   .connector { position: absolute; inset: 0; pointer-events: none; }
 
   #pointsList { display: flex; flex-direction: column; gap: 8px; }
@@ -197,29 +267,12 @@
   .pointRowLeft { display: flex; align-items: center; gap: 8px; }
   .dot { width: 12px; height: 12px; border-radius: 999px; flex-shrink: 0; }
   .pointRowActions { display: flex; align-items: center; gap: 10px; }
-  .iconBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; display: flex; }
+  .iconBtn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; display: flex; font-size: 13px; }
   .iconBtn:hover { color: var(--fg); }
-  .sliderRow { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
-  .sliderRow label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-  input[type=range] {
-    -webkit-appearance: none;
-    width: 100%;
-    background: transparent;
-  }
-  input[type=range]::-webkit-slider-runnable-track { height: 2px; background: #4a4640; }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    margin-top: -6px;
-    width: 14px; height: 14px;
-    border-radius: 999px;
-    background: var(--fg);
-    border: 2px solid var(--bg);
-    cursor: pointer;
-  }
-  input[type=range]::-moz-range-track { height: 2px; background: #4a4640; }
-  input[type=range]::-moz-range-thumb {
-    width: 14px; height: 14px; border-radius: 999px;
-    background: var(--fg); border: 2px solid var(--bg); cursor: pointer;
+  .userTag {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: #d97757; border: 1px solid rgba(217,119,87,0.4);
+    padding: 1px 5px; border-radius: 3px;
   }
 
   #footNote { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); font-size: 10px; line-height: 1.6; color: #5a564d; }
@@ -244,21 +297,25 @@
   <div class="swatch"></div>
   <div>
     <p class="big display">You think in color.</p>
-    <p class="sub">Upload a photo. Click any color in it.<br>Drag it on the wheel to shift it.</p>
+    <p class="sub">Upload a photo. We'll find its colors for you.<br>Drag any of them on the wheel to shift it.</p>
   </div>
-  <div id="dropZone">
-    <label style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:8px;">
-      <span class="btn">⬆ Choose a photo</span>
-      <span style="font-size:10px; color:var(--muted);">or drop one here</span>
-      <input type="file" id="fileInput" accept="image/*">
-    </label>
-  </div>
+  <label style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:10px;">
+    <span class="btn">⬆ Choose a photo</span>
+    <input type="file" id="fileInput" accept="image/*">
+  </label>
 </div>
 
 <div id="editor">
   <div id="canvasArea">
     <canvas id="mainCanvas"></canvas>
-    <div id="pickHint">Click a color in the photo</div>
+    <div id="pickHint">Tap a color in the photo to add it</div>
+    <div id="analyzing">
+      <div class="spinner"></div>
+      <p>Finding the colors in your photo…</p>
+    </div>
+    <div id="suggestBar">
+      <button id="suggestBtn"><span class="dot-icon"></span> Suggest a look</button>
+    </div>
   </div>
   <div id="sidePanel">
     <div>
@@ -269,14 +326,12 @@
     <div id="wheelWrap">
       <div id="wheel">
         <div id="wheelCenterDot"></div>
-        <!-- markers injected by JS -->
       </div>
-      <button class="btn" id="pickBtn">◎ Pick a color</button>
+      <button class="btn" id="pickBtn">◎ Add a color manually</button>
     </div>
 
     <div id="pointsList">
-      <div id="pointsLabel">No colors picked yet</div>
-      <!-- point rows injected by JS -->
+      <div id="pointsLabel">Finding colors…</div>
     </div>
 
     <div id="footNote">
@@ -290,7 +345,9 @@
 (function () {
   "use strict";
 
-  // ---------- color math ----------
+  // =========================================================
+  //  COLOR MATH: RGB <-> HSL, RGB <-> Lab
+  // =========================================================
   function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -331,11 +388,46 @@
     return [r * 255, g * 255, b * 255];
   }
 
+  // sRGB -> CIE Lab (D65)
+  function rgbToLab(r, g, b) {
+    let rl = r / 255, gl = g / 255, bl = b / 255;
+    rl = rl > 0.04045 ? Math.pow((rl + 0.055) / 1.055, 2.4) : rl / 12.92;
+    gl = gl > 0.04045 ? Math.pow((gl + 0.055) / 1.055, 2.4) : gl / 12.92;
+    bl = bl > 0.04045 ? Math.pow((bl + 0.055) / 1.055, 2.4) : bl / 12.92;
+    rl *= 100; gl *= 100; bl *= 100;
+    const x = rl * 0.4124 + gl * 0.3576 + bl * 0.1805;
+    const y = rl * 0.2126 + gl * 0.7152 + bl * 0.0722;
+    const z = rl * 0.0193 + gl * 0.1192 + bl * 0.9505;
+    const xn = 95.047, yn = 100.0, zn = 108.883;
+    const fx = labF(x / xn), fy = labF(y / yn), fz = labF(z / zn);
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  }
+  function labF(t) {
+    return t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
+  }
+  function labToRgb(L, a, bb) {
+    const fy = (L + 16) / 116;
+    const fx = fy + a / 500;
+    const fz = fy - bb / 200;
+    const xn = 95.047, yn = 100.0, zn = 108.883;
+    const finv = (t) => { const t3 = t * t * t; return t3 > 0.008856 ? t3 : (t - 16 / 116) / 7.787; };
+    const x = xn * finv(fx) / 100, y = yn * finv(fy) / 100, z = zn * finv(fz) / 100;
+    let r = x * 3.2406 + y * -1.5372 + z * -0.4986;
+    let g = x * -0.9689 + y * 1.8758 + z * 0.0415;
+    let b2 = x * 0.0557 + y * -0.2040 + z * 1.0570;
+    const gam = (c) => c > 0.0031308 ? 1.055 * Math.pow(c, 1 / 2.4) - 0.055 : 12.92 * c;
+    r = gam(r); g = gam(g); b2 = gam(b2);
+    return [
+      Math.max(0, Math.min(255, r * 255)),
+      Math.max(0, Math.min(255, g * 255)),
+      Math.max(0, Math.min(255, b2 * 255))
+    ];
+  }
+
   function hueDist(a, b) {
     const d = Math.abs(a - b) % 360;
     return d > 180 ? 360 - d : d;
   }
-
   function angleToPoint(deg, radius) {
     const rad = (deg * Math.PI) / 180;
     return { x: Math.cos(rad) * radius, y: -Math.sin(rad) * radius };
@@ -346,359 +438,151 @@
     return deg;
   }
 
-  // ---------- state ----------
-  let imgEl = null;
-  let points = []; // {id, srcHue, srcSat, srcLight, hue, sat, light}
-  let selectedId = null;
-  let pickMode = false;
-  let dragId = null;
-  let fileName = "photo";
+  // =========================================================
+  //  K-MEANS++ IN LAB SPACE (color detection)
+  // =========================================================
+  function detectPalette(imageData, k) {
+    const data = imageData.data;
+    const n = data.length / 4;
 
-  const WHEEL_SIZE = 260;
-  const WHEEL_R = WHEEL_SIZE / 2 - 14;
-
-  const workCanvas = document.createElement("canvas");
-  const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
-
-  // ---------- DOM refs ----------
-  const emptyEl = document.getElementById("empty");
-  const editorEl = document.getElementById("editor");
-  const dropZone = document.getElementById("dropZone");
-  const fileInput = document.getElementById("fileInput");
-  const fileInput2 = document.getElementById("fileInput2");
-  const mainCanvas = document.getElementById("mainCanvas");
-  const mainCtx = mainCanvas.getContext("2d");
-  const pickHint = document.getElementById("pickHint");
-  const pickBtn = document.getElementById("pickBtn");
-  const wheel = document.getElementById("wheel");
-  const pointsList = document.getElementById("pointsList");
-  const pointsLabel = document.getElementById("pointsLabel");
-  const resetAllBtn = document.getElementById("resetAllBtn");
-  const downloadBtn = document.getElementById("downloadBtn");
-
-  // ---------- load file ----------
-  function loadFile(file) {
-    if (!file || !file.type.startsWith("image/")) return;
-    fileName = file.name.replace(/\.[^.]+$/, "") || "photo";
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        imgEl = img;
-        points = [];
-        selectedId = null;
-        emptyEl.style.display = "none";
-        editorEl.style.display = "flex";
-        downloadBtn.style.display = "inline-flex";
-        render();
-        renderWheel();
-        renderPointsList();
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  fileInput.addEventListener("change", (e) => loadFile(e.target.files[0]));
-  fileInput2.addEventListener("change", (e) => loadFile(e.target.files[0]));
-
-  dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
-  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-  dropZone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dropZone.classList.remove("dragover");
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) loadFile(file);
-  });
-  // page-wide drop too
-  window.addEventListener("dragover", (e) => e.preventDefault());
-  window.addEventListener("drop", (e) => {
-    if (editorEl.style.display === "flex") return; // avoid double-handling once editor open (still fine)
-    e.preventDefault();
-  });
-
-  // ---------- render image with color shifts ----------
-  function render() {
-    if (!imgEl) return;
-    const maxDim = 1800;
-    let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
-    if (w > maxDim || h > maxDim) {
-      const scale = maxDim / Math.max(w, h);
-      w = Math.round(w * scale);
-      h = Math.round(h * scale);
+    // sample all pixels into Lab space (skip near-transparent / near-gray-black-white extremes lightly)
+    const labPoints = [];
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+      if (a < 200) continue;
+      const [L, A, B] = rgbToLab(r, g, b);
+      labPoints.push([L, A, B]);
     }
-    workCanvas.width = w;
-    workCanvas.height = h;
-    workCtx.drawImage(imgEl, 0, 0, w, h);
+    if (labPoints.length === 0) return [];
 
-    if (points.length > 0) {
-      const imageData = workCtx.getImageData(0, 0, w, h);
-      const data = imageData.data;
-      const active = points.map(p => ({
-        srcHue: p.srcHue,
-        dHue: ((p.hue - p.srcHue + 540) % 360) - 180,
-        dSat: p.sat - p.srcSat,
-        dLight: p.light - p.srcLight
-      }));
+    // subsample for clustering speed while keeping full-image representation
+    // (still analyzes the whole image's distribution, just caps point count for the iterative loop)
+    const MAX_SAMPLE = 20000;
+    let sample = labPoints;
+    if (labPoints.length > MAX_SAMPLE) {
+      sample = [];
+      const step = labPoints.length / MAX_SAMPLE;
+      for (let i = 0; i < MAX_SAMPLE; i++) {
+        sample.push(labPoints[Math.floor(i * step)]);
+      }
+    }
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const [h, s, l] = rgbToHsl(r, g, b);
-        if (s < 4) continue;
+    // k-means++ seeding
+    function dist2(p, q) {
+      const dl = p[0]-q[0], da = p[1]-q[1], db = p[2]-q[2];
+      return dl*dl + da*da + db*db;
+    }
+    const centers = [];
+    centers.push(sample[Math.floor(Math.random() * sample.length)]);
+    while (centers.length < k) {
+      const dists = sample.map(p => {
+        let min = Infinity;
+        for (const c of centers) { const d = dist2(p, c); if (d < min) min = d; }
+        return min;
+      });
+      const sum = dists.reduce((a, b) => a + b, 0);
+      let r = Math.random() * sum;
+      let idx = 0;
+      for (; idx < dists.length; idx++) { r -= dists[idx]; if (r <= 0) break; }
+      centers.push(sample[Math.min(idx, sample.length - 1)]);
+    }
 
-        let totalW = 0, dh = 0, ds = 0, dl = 0;
-        for (let k = 0; k < active.length; k++) {
-          const p = active[k];
-          const hd = hueDist(h, p.srcHue);
-          if (hd > 60) continue;
-          const w2 = Math.pow(1 - hd / 60, 2);
-          totalW += w2;
-          dh += w2 * p.dHue;
-          ds += w2 * p.dSat;
-          dl += w2 * p.dLight;
+    // Lloyd's iterations to real convergence (capped for safety, but generous)
+    let assignments = new Array(sample.length).fill(0);
+    const MAX_ITERS = 40;
+    for (let iter = 0; iter < MAX_ITERS; iter++) {
+      let changed = false;
+      for (let i = 0; i < sample.length; i++) {
+        let best = 0, bestD = Infinity;
+        for (let c = 0; c < centers.length; c++) {
+          const d = dist2(sample[i], centers[c]);
+          if (d < bestD) { bestD = d; best = c; }
         }
-        if (totalW <= 0) continue;
-        dh /= totalW; ds /= totalW; dl /= totalW;
-        const falloff = Math.min(1, totalW);
-        const newH = (h + dh * falloff + 360) % 360;
-        const newS = Math.max(0, Math.min(100, s + ds * falloff));
-        const newL = Math.max(0, Math.min(100, l + dl * falloff));
-        const [nr, ng, nb] = hslToRgb(newH, newS, newL);
-        data[i] = nr; data[i + 1] = ng; data[i + 2] = nb;
+        if (assignments[i] !== best) { assignments[i] = best; changed = true; }
       }
-      workCtx.putImageData(imageData, 0, 0);
-    }
-
-    mainCanvas.width = w;
-    mainCanvas.height = h;
-    mainCtx.clearRect(0, 0, w, h);
-    mainCtx.drawImage(workCanvas, 0, 0);
-  }
-
-  // ---------- picking colors from canvas ----------
-  pickBtn.addEventListener("click", () => {
-    pickMode = !pickMode;
-    pickBtn.classList.toggle("active", pickMode);
-    pickBtn.textContent = pickMode ? "◎ Click the photo…" : "◎ Pick a color";
-    mainCanvas.classList.toggle("picking", pickMode);
-    pickHint.classList.toggle("show", pickMode);
-  });
-
-  mainCanvas.addEventListener("click", (e) => {
-    if (!pickMode) return;
-    const rect = mainCanvas.getBoundingClientRect();
-    const scaleX = mainCanvas.width / rect.width;
-    const scaleY = mainCanvas.height / rect.height;
-    const x = Math.floor((e.clientX - rect.left) * scaleX);
-    const y = Math.floor((e.clientY - rect.top) * scaleY);
-    const pixel = mainCtx.getImageData(x, y, 1, 1).data;
-    const [h, s, l] = rgbToHsl(pixel[0], pixel[1], pixel[2]);
-    if (s < 4) return;
-
-    const existing = points.find(p => hueDist(p.srcHue, h) < 8);
-    if (existing) {
-      selectedId = existing.id;
-    } else {
-      const id = Date.now() + Math.random();
-      points.push({ id, srcHue: h, srcSat: s, srcLight: l, hue: h, sat: s, light: l });
-      selectedId = id;
-    }
-    pickMode = false;
-    pickBtn.classList.remove("active");
-    pickBtn.textContent = "◎ Pick a color";
-    mainCanvas.classList.remove("picking");
-    pickHint.classList.remove("show");
-
-    renderWheel();
-    renderPointsList();
-    resetAllBtn.disabled = points.length === 0;
-  });
-
-  // ---------- wheel rendering + drag ----------
-  function renderWheel() {
-    // remove old markers (keep center dot)
-    Array.from(wheel.querySelectorAll(".ghostMarker,.curMarker,.connectorSvg")).forEach(el => el.remove());
-
-    points.forEach(p => {
-      const srcPt = angleToPoint(p.srcHue, (p.srcSat / 100) * WHEEL_R);
-      const curPt = angleToPoint(p.hue, (p.sat / 100) * WHEEL_R);
-      const isSel = p.id === selectedId;
-
-      const ghost = document.createElement("div");
-      ghost.className = "ghostMarker";
-      ghost.style.left = (WHEEL_SIZE / 2 + srcPt.x) + "px";
-      ghost.style.top = (WHEEL_SIZE / 2 + srcPt.y) + "px";
-      wheel.appendChild(ghost);
-
-      const svgNS = "http://www.w3.org/2000/svg";
-      const svg = document.createElementNS(svgNS, "svg");
-      svg.setAttribute("class", "connectorSvg connector");
-      svg.setAttribute("width", WHEEL_SIZE);
-      svg.setAttribute("height", WHEEL_SIZE);
-      const line = document.createElementNS(svgNS, "line");
-      line.setAttribute("x1", WHEEL_SIZE / 2 + srcPt.x);
-      line.setAttribute("y1", WHEEL_SIZE / 2 + srcPt.y);
-      line.setAttribute("x2", WHEEL_SIZE / 2 + curPt.x);
-      line.setAttribute("y2", WHEEL_SIZE / 2 + curPt.y);
-      svg.appendChild(line);
-      wheel.appendChild(svg);
-
-      const marker = document.createElement("div");
-      marker.className = "curMarker";
-      const size = isSel ? 18 : 14;
-      marker.style.width = size + "px";
-      marker.style.height = size + "px";
-      marker.style.left = (WHEEL_SIZE / 2 + curPt.x) + "px";
-      marker.style.top = (WHEEL_SIZE / 2 + curPt.y) + "px";
-      marker.style.marginLeft = -(size / 2) + "px";
-      marker.style.marginTop = -(size / 2) + "px";
-      marker.style.background = `hsl(${p.hue}, ${p.sat}%, 55%)`;
-      marker.style.border = isSel ? "2px solid #e8e3d9" : "2px solid rgba(232,227,217,0.6)";
-      marker.dataset.id = p.id;
-      marker.addEventListener("pointerdown", (e) => {
-        e.stopPropagation();
-        dragId = p.id;
-        selectedId = p.id;
-        renderPointsList();
-      });
-      wheel.appendChild(marker);
-    });
-  }
-
-  function wheelPosFromEvent(e) {
-    const rect = wheel.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    let x = e.clientX - cx;
-    let y = e.clientY - cy;
-    const dist = Math.sqrt(x * x + y * y);
-    if (dist > WHEEL_R) {
-      x = (x / dist) * WHEEL_R;
-      y = (y / dist) * WHEEL_R;
-    }
-    const angle = pointToAngle(x, y);
-    const sat = Math.min(100, (Math.sqrt(x * x + y * y) / WHEEL_R) * 100);
-    return { angle, sat };
-  }
-
-  window.addEventListener("pointermove", (e) => {
-    if (!dragId) return;
-    const { angle, sat } = wheelPosFromEvent(e);
-    const p = points.find(pt => pt.id === dragId);
-    if (p) {
-      p.hue = angle;
-      p.sat = sat;
-      renderWheel();
-      renderPointsList();
-      render();
-    }
-  });
-  window.addEventListener("pointerup", () => { dragId = null; });
-
-  // ---------- points list ----------
-  function renderPointsList() {
-    Array.from(pointsList.querySelectorAll(".pointRow")).forEach(el => el.remove());
-    pointsLabel.textContent = points.length === 0
-      ? "No colors picked yet"
-      : `${points.length} color${points.length > 1 ? "s" : ""} in play`;
-
-    points.forEach(p => {
-      const isSel = p.id === selectedId;
-      const row = document.createElement("div");
-      row.className = "pointRow" + (isSel ? " selected" : "");
-      row.addEventListener("click", () => {
-        selectedId = p.id;
-        renderWheel();
-        renderPointsList();
-      });
-
-      const top = document.createElement("div");
-      top.className = "pointRowTop";
-
-      const left = document.createElement("div");
-      left.className = "pointRowLeft";
-      const dot = document.createElement("div");
-      dot.className = "dot";
-      dot.style.background = `hsl(${p.hue}, ${p.sat}%, 55%)`;
-      const hueLabel = document.createElement("span");
-      hueLabel.style.fontSize = "11px";
-      hueLabel.style.color = "#c9c3b6";
-      hueLabel.textContent = `hue ${Math.round(p.hue)}°`;
-      left.appendChild(dot);
-      left.appendChild(hueLabel);
-
-      const actions = document.createElement("div");
-      actions.className = "pointRowActions";
-      const resetBtn = document.createElement("button");
-      resetBtn.className = "iconBtn";
-      resetBtn.title = "Reset this color";
-      resetBtn.textContent = "↺";
-      resetBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        p.hue = p.srcHue; p.sat = p.srcSat; p.light = p.srcLight;
-        renderWheel(); renderPointsList(); render();
-      });
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "iconBtn";
-      removeBtn.title = "Remove";
-      removeBtn.textContent = "✕";
-      removeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        points = points.filter(pt => pt.id !== p.id);
-        if (selectedId === p.id) selectedId = null;
-        renderWheel(); renderPointsList(); render();
-        resetAllBtn.disabled = points.length === 0;
-      });
-      actions.appendChild(resetBtn);
-      actions.appendChild(removeBtn);
-
-      top.appendChild(left);
-      top.appendChild(actions);
-      row.appendChild(top);
-
-      if (isSel) {
-        const sliderRow = document.createElement("div");
-        sliderRow.className = "sliderRow";
-        const label = document.createElement("label");
-        label.textContent = `Lightness ${Math.round(p.light)}`;
-        const slider = document.createElement("input");
-        slider.type = "range";
-        slider.min = "0"; slider.max = "100";
-        slider.value = p.light;
-        slider.addEventListener("input", (e) => {
-          p.light = Number(e.target.value);
-          label.textContent = `Lightness ${Math.round(p.light)}`;
-          renderWheel();
-          render();
-        });
-        sliderRow.appendChild(label);
-        sliderRow.appendChild(slider);
-        row.appendChild(sliderRow);
+      const sums = centers.map(() => [0, 0, 0, 0]);
+      for (let i = 0; i < sample.length; i++) {
+        const c = assignments[i];
+        sums[c][0] += sample[i][0];
+        sums[c][1] += sample[i][1];
+        sums[c][2] += sample[i][2];
+        sums[c][3]++;
       }
+      for (let c = 0; c < centers.length; c++) {
+        if (sums[c][3] > 0) {
+          centers[c] = [sums[c][0]/sums[c][3], sums[c][1]/sums[c][3], sums[c][2]/sums[c][3]];
+        }
+      }
+      if (!changed) break;
+    }
 
-      pointsList.appendChild(row);
-    });
+    // build clusters with size + mean saturation (for prominence weighting)
+    const clusters = centers.map(() => ({ count: 0, L: 0, A: 0, B: 0 }));
+    for (let i = 0; i < sample.length; i++) {
+      const c = assignments[i];
+      clusters[c].count++;
+    }
+
+    const results = [];
+    for (let c = 0; c < centers.length; c++) {
+      if (clusters[c].count < sample.length * 0.005) continue; // drop near-empty/negligible clusters
+      const [L, A, B] = centers[c];
+      const [r, g, b] = labToRgb(L, A, B);
+      const [h, s, l] = rgbToHsl(r, g, b);
+      if (s < 6) continue; // skip near-gray clusters, nothing meaningful to grade
+      // prominence score: pixel share weighted up by saturation (so small vivid clusters aren't ignored)
+      const share = clusters[c].count / sample.length;
+      const prominence = share * (0.4 + 0.6 * (s / 100));
+      results.push({ hue: h, sat: s, light: l, prominence });
+    }
+
+    // sort by prominence, keep top ones, then de-duplicate close hues
+    results.sort((a, b) => b.prominence - a.prominence);
+    const final = [];
+    for (const r of results) {
+      if (final.length >= 8) break;
+      const tooClose = final.some(f => hueDist(f.hue, r.hue) < 12 && Math.abs(f.sat - r.sat) < 15);
+      if (!tooClose) final.push(r);
+    }
+    return final;
   }
 
-  // ---------- reset all / download ----------
-  resetAllBtn.addEventListener("click", () => {
-    points = [];
-    selectedId = null;
-    renderWheel();
-    renderPointsList();
-    render();
-    resetAllBtn.disabled = true;
-  });
+  // =========================================================
+  //  SUGGESTED LOOK: nudge each detected point toward a
+  //  more "finished" grading position (subtle, tasteful)
+  // =========================================================
+  function computeSuggestion(point) {
+    // Push saturation up modestly for mid-saturation colors (more alive),
+    // gently reduce for already-oversaturated ones (avoid garish),
+    // and nudge shadow/warm-cool balance slightly for a "graded" feel.
+    let sat = point.srcSat;
+    if (sat < 55) {
+      sat = Math.min(100, sat + (55 - sat) * 0.35 + 8);
+    } else if (sat > 80) {
+      sat = sat - (sat - 80) * 0.25;
+    }
+    // slight hue drift toward warmth for warm-side hues, toward cool for cool-side — a gentle filmic push
+    let hue = point.srcHue;
+    const warm = hue < 90 || hue > 300; // reds/oranges/yellows/magentas
+    hue = warm ? hue - 3 : hue + 3;
+    hue = (hue + 360) % 360;
+    return { hue, sat: Math.max(0, Math.min(100, sat)) };
+  }
 
-  downloadBtn.addEventListener("click", () => {
-    const link = document.createElement("a");
-    link.download = `${fileName}-tonewheel.png`;
-    link.href = workCanvas.toDataURL("image/png");
-    link.click();
-  });
-
-})();
-</script>
-</body>
-</html>
-
+  // =========================================================
+  //  RECOLOR WORKER (runs the per-pixel shift off the main thread)
+  // =========================================================
+  const workerSrc = `
+    function hueDist(a, b) { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; }
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) { h = s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+         
